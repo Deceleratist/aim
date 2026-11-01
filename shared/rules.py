@@ -56,6 +56,47 @@ def screen_charges(list_mol, charge = 0):
         return list(range(len(list_mol)))
 
 
+def strong_ions(mol):
+    """(strongly basic anions, strongly acidic cations) in a state, for the sharper charge screen.
+
+    Strongly basic anion: O-, N- or C- whose conjugate acid is weak (alkoxide, amide, carbanion,
+    enolate). Not counted: an anion bonded to a cation (P+-O-, nitro, azide, ylide forms) and O- on
+    an atom that also carries =O or =S (carboxylate, sulfonate, phosphate), which survive in acid.
+    Strongly acidic cation: O+ carrying H (oxonium, protonated C=O or alcohol) or a bare H+.
+    """
+    try:
+        mol.UpdatePropertyCache(strict=False)
+    except Exception:
+        pass
+    bases = acids = 0
+    for atom in mol.GetAtoms():
+        q, z = atom.GetFormalCharge(), atom.GetAtomicNum()
+        if q < 0 and z in (6, 7, 8):
+            nbrs = atom.GetNeighbors()
+            if any(n.GetFormalCharge() > 0 for n in nbrs):
+                continue
+            if z == 8 and any(b.GetBondType() == Chem.BondType.DOUBLE and b.GetOtherAtom(n).GetAtomicNum() in (8, 16)
+                              for n in nbrs for b in n.GetBonds() if b.GetOtherAtom(n).GetIdx() != atom.GetIdx()):
+                continue
+            bases += 1
+        elif q > 0 and ((z == 8 and atom.GetTotalNumHs(includeNeighbors=True) > 0) or (z == 1 and atom.GetDegree() == 0)):
+            acids += 1
+    return bases, acids
+
+
+def screen_charges_sharp(list_mol, charge, parent):
+    """Plan E1f (AIM_SHARP_CHARGE_SCREEN=1): in a net-positive (acidic) mixture drop only moves that
+    create a strongly basic anion; in a net-negative (basic) mixture only moves that create a strongly
+    acidic cation. Ions already present, and weak ones (halide, carboxylate, BH3CN-), are allowed,
+    unlike screen_charges, which rejects any charged atom (and so any spectator anion; R16)."""
+    if charge == 0:
+        return list(range(len(list_mol)))
+    b0, a0 = strong_ions(parent)
+    k = 0 if charge > 0 else 1
+    before = (b0, a0)[k]
+    return [i for i, m in enumerate(list_mol) if strong_ions(m)[k] <= before]
+
+
 def identify_source(mol, p_block = False):
     for atom in mol.GetAtoms():
         # Look for hydrides - M-H bond
@@ -636,7 +677,10 @@ def execute_step(mol_inp, kekulise = False, screen_charges_enabled = True):
         charge = 0
         for atom in mol_inp.GetAtoms():
             charge += atom.GetFormalCharge()
-        clean_list = screen_charges(connected_mols, charge)
+        if os.environ.get("AIM_SHARP_CHARGE_SCREEN") == "1":
+            clean_list = screen_charges_sharp(connected_mols, charge, mol_inp)
+        else:
+            clean_list = screen_charges(connected_mols, charge)
     else:
         clean_list = list(range(len(connected_mols)))
     
