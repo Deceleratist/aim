@@ -3,7 +3,9 @@
 For each test reaction: start from the reactants, target = the molecules of the gold final state
 that contain the recorded product's atoms (the converter's end state, so labels that stop before
 the last proton transfer are still a fair target). Then report, per scorer:
-  found      - a complete mechanism reaches the target within the depth limit
+  found      - a complete mechanism reaches the product within the depth limit
+  full_top3  - one of the top-3 ends with every reacting molecule of the gold end state, by-products
+               included (a route that skips the reagent, e.g. amide from acid without DCC, fails)
   gold_top1  - the best-scored mechanism passes through every gold intermediate, in order
   gold_top3  - one of the top-3 mechanisms does
 
@@ -43,13 +45,16 @@ def gold_route(updated_reaction: str, label: str):
         return None
     prod_maps = {a.GetAtomMapNum() for a in Chem.MolFromSmiles(product).GetAtoms() if a.GetAtomMapNum()}
     final = Chem.MolFromSmiles(aim_view_smiles(state))
-    targets = set()
+    targets, full_targets = set(), set()
     for frag in Chem.GetMolFrags(final, asMols=True):
-        if {a.GetAtomMapNum() for a in frag.GetAtoms()} & prod_maps:
+        maps = {a.GetAtomMapNum() for a in frag.GetAtoms()} - {0}
+        if maps & prod_maps:
             targets.add(state_key(frag))
+        if maps:
+            full_targets.add(state_key(frag))   # every reacting molecule incl. by-products (e.g. DCU)
     starts = [state_key(aim_view_smiles(s.start)) for s in steps] + [state_key(aim_view_smiles(state))]
     n_moves = sum(len(s.aim_moves) for s in steps)
-    return aim_view_smiles(steps[0].start), targets, starts[1:], n_moves
+    return aim_view_smiles(steps[0].start), targets, starts[1:], n_moves, full_targets
 
 
 def follows(gold: list[str], path: list[str]) -> bool:
@@ -67,6 +72,7 @@ def main() -> None:
     parser.add_argument("--chunk", type=int, default=0)
     parser.add_argument("--nchunks", type=int, default=1)
     parser.add_argument("--beam", type=int, default=10)
+    parser.add_argument("--screen-charges", action="store_true", help="apply AIM's acid/base charge screen")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
@@ -87,14 +93,24 @@ def main() -> None:
                 if g is None:
                     rec["skipped"] = "not fully mapped"
                 else:
-                    start, targets, gold_states, n_moves = g
+                    start, targets, gold_states, n_moves, full_targets = g
                     depth = min(n_moves + 2, 14)
-                    paths, info = beam_search(start, targets, scorer, depth=depth, beam=args.beam)
+                    paths, info = beam_search(start, targets, scorer, depth=depth, beam=args.beam,
+                                              screen_charges=args.screen_charges)
+
+                    def full(p):
+                        # the end state contains every reacting molecule of the gold end state,
+                        # by-products included, so a route that skips the reagent does not count
+                        return full_targets <= set(p.states[-1].split("."))
+
                     rec.update(n_gold_moves=n_moves, depth=depth, found=bool(paths),
+                               full_top1=bool(paths) and full(paths[0]),
+                               full_top3=any(full(p) for p in paths),
                                gold_top1=bool(paths) and follows(gold_states, paths[0].states),
                                gold_top3=any(follows(gold_states, p.states) for p in paths),
                                best_len=len(paths[0].moves) if paths else None,
-                               logps=[round(p.logp, 2) for p in paths], **info)
+                               logps=[round(p.logp, 2) for p in paths],
+                               paths=[{"moves": p.moves, "end": p.states[-1]} for p in paths], **info)
             except Exception as e:
                 rec["error"] = f"{type(e).__name__}: {e}"
             rec["seconds"] = round(time.time() - t0, 1)

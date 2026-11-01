@@ -21,12 +21,13 @@ def main() -> None:
     for r in recs:
         groups[(r["scorer"], "all")].append(r)
         groups[(r["scorer"], r["split"])].append(r)
-    print(f"{'scorer':8s} {'split':12s} {'n':>5s} {'skip':>5s} {'err':>4s} {'found':>6s} {'gold@1':>7s} {'gold@3':>7s} {'sec':>6s}")
+    print(f"{'scorer':8s} {'split':12s} {'n':>5s} {'skip':>5s} {'err':>4s} {'found':>6s} {'full@1':>7s} {'full@3':>7s} {'gold@1':>7s} {'gold@3':>7s} {'sec':>6s}")
     for (scorer, split), rs in sorted(groups.items()):
         ok = [r for r in rs if "found" in r]
         n = len(ok) or 1
         print(f"{scorer:8s} {split:12s} {len(ok):5d} {sum('skipped' in r for r in rs):5d} {sum('error' in r for r in rs):4d} "
-              f"{sum(r['found'] for r in ok) / n:6.3f} {sum(r['gold_top1'] for r in ok) / n:7.3f} "
+              f"{sum(r['found'] for r in ok) / n:6.3f} {sum(r.get('full_top1', False) for r in ok) / n:7.3f} "
+              f"{sum(r.get('full_top3', False) for r in ok) / n:7.3f} {sum(r['gold_top1'] for r in ok) / n:7.3f} "
               f"{sum(r['gold_top3'] for r in ok) / n:7.3f} {sum(r['seconds'] for r in ok) / n:6.1f}")
     # per class, both scorers side by side (classes with >= 8 reactions)
     by = defaultdict(lambda: defaultdict(list))
