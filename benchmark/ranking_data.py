@@ -12,14 +12,18 @@ candidate moves. One pass gives:
 Fingerprints are stored as uint8 (0, 1, 255 = NaN/unused).
 Splits (fixed, reproducible): 'test_class' = whole held-out reaction classes; 'test_random' =
 10 % of the remaining reactions (by row hash); 'train' = the rest.
+AIM_TRAIN_HALF_OF=<class> (plan E1c) moves half of that held-out class's reactions (by row hash)
+into 'train'; the other half stays 'test_class'. Every tool that calls split_of follows it.
 
 python -m benchmark.ranking_data --chunk 3 --nchunks 128 --out <dir>
+python -m benchmark.ranking_data --chunk 0 --nchunks 8 --only_class Mitsunobu --evalfull_fraction 1 --out <dir>
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 
@@ -52,6 +56,8 @@ def _hash01(*parts) -> float:
 
 def split_of(row: int, cls: str) -> str:
     if cls in HELD_OUT_CLASSES:
+        if cls == os.environ.get("AIM_TRAIN_HALF_OF") and _hash01("half", row) < 0.5:
+            return "train"
         return "test_class"
     return "test_random" if _hash01("split", row) < 0.10 else "train"
 
@@ -103,6 +109,8 @@ def main() -> None:
     parser.add_argument("--nchunks", type=int, required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--limit", type=int, default=None, help="max reactions in this chunk (testing)")
+    parser.add_argument("--only_class", default=None, help="process only reactions of this class")
+    parser.add_argument("--evalfull_fraction", type=float, default=EVALFULL_FRACTION)
     args = parser.parse_args()
 
     out = Path(args.out)
@@ -110,7 +118,8 @@ def main() -> None:
     clf = xgboost.XGBClassifier()
     clf.load_model(str(root_dir / "models" / args.model / "xg_model.json"))
     df = pd.read_csv(args.data)
-    rows = [i for i in range(len(df)) if i % args.nchunks == args.chunk][: args.limit]
+    rows = [i for i in range(len(df)) if args.only_class in (None, df.mechanistic_class[i])]
+    rows = [i for j, i in enumerate(rows) if j % args.nchunks == args.chunk][: args.limit]
     rng = np.random.default_rng(args.chunk)
 
     train_x, train_y, train_q = [], [], []
@@ -150,7 +159,7 @@ def main() -> None:
                     train_x.append(encode(fps[idx]))
                     train_y += [1] + [0] * len(neg)
                     train_q += [qid] * len(idx)
-                elif _hash01("evalfull", qid) < EVALFULL_FRACTION:
+                elif _hash01("evalfull", qid) < args.evalfull_fraction:
                     eval_x.append(encode(fps))
                     eval_gold += [i == gi for i in range(len(fps))]
                     eval_q += [qid] * len(fps)

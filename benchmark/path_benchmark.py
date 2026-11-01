@@ -90,12 +90,14 @@ def main() -> None:
     parser.add_argument("--nchunks", type=int, default=1)
     parser.add_argument("--beam", type=int, default=10)
     parser.add_argument("--screen-charges", action="store_true", help="apply AIM's acid/base charge screen")
+    parser.add_argument("--only_class", default=None, help="sample only test reactions of this class")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
     scorer = Scorer(args.scorer, args.ranker)
     df = pd.read_csv(args.data)
-    test = [i for i in range(len(df)) if split_of(i, df.mechanistic_class[i]) != "train"]
+    test = [i for i in range(len(df)) if split_of(i, df.mechanistic_class[i]) != "train"
+            and args.only_class in (None, df.mechanistic_class[i])]
     test = sorted(test, key=lambda i: _hash01("path", i))[: args.n]
     mine = [r for j, r in enumerate(test) if j % args.nchunks == args.chunk]
     out = Path(args.out)
