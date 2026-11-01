@@ -6,6 +6,8 @@ the last proton transfer are still a fair target). Then report, per scorer:
   found      - a complete mechanism reaches the product within the depth limit
   full_top3  - one of the top-3 ends with every reacting molecule of the gold end state, by-products
                included (a route that skips the reagent, e.g. amide from acid without DCC, fails)
+  org_top3   - as full_top3 but only the carbon-containing gold molecules (ignores inorganic
+               bookkeeping such as NaOH + H+ vs Na+ + H2O)
   gold_top1  - the best-scored mechanism passes through every gold intermediate, in order
   gold_top3  - one of the top-3 mechanisms does
 
@@ -32,6 +34,21 @@ from benchmark.ranking_data import _hash01, split_of  # noqa: E402
 from benchmark.step_recall import aim_view_smiles  # noqa: E402
 
 
+def norm_key(smiles: str) -> str:
+    """state_key with H2 written one way. The converter's states keep H2 as [H][H] while AIM writes
+    [HH], so without this every NaH reaction failed full/gold matching even on the textbook route.
+    (RemoveHs with removeOnlyHNeighbors deletes H2 altogether, so it is rewritten here instead.)"""
+    return ".".join(sorted("[HH]" if f == "[H][H]" else f for f in state_key(smiles).split(".")))
+
+
+def norm_frags(state: str) -> set[str]:
+    return {norm_key(s) for s in state.split(".")}
+
+
+def has_carbon(key: str) -> bool:
+    return any(a.GetAtomicNum() == 6 for a in Chem.MolFromSmiles(key).GetAtoms())
+
+
 def gold_route(updated_reaction: str, label: str):
     """(start SMILES, target fragment keys, gold intermediate keys, number of AIM moves) or None."""
     reactants, product = updated_reaction.split(">>")
@@ -51,8 +68,8 @@ def gold_route(updated_reaction: str, label: str):
         if maps & prod_maps:
             targets.add(state_key(frag))
         if maps:
-            full_targets.add(state_key(frag))   # every reacting molecule incl. by-products (e.g. DCU)
-    starts = [state_key(aim_view_smiles(s.start)) for s in steps] + [state_key(aim_view_smiles(state))]
+            full_targets.add(norm_key(Chem.MolToSmiles(frag)))   # every reacting molecule incl. by-products (e.g. DCU)
+    starts = [norm_key(aim_view_smiles(s.start)) for s in steps] + [norm_key(aim_view_smiles(state))]
     n_moves = sum(len(s.aim_moves) for s in steps)
     return aim_view_smiles(steps[0].start), targets, starts[1:], n_moves, full_targets
 
@@ -98,19 +115,31 @@ def main() -> None:
                     paths, info = beam_search(start, targets, scorer, depth=depth, beam=args.beam,
                                               screen_charges=args.screen_charges)
 
+                    org_targets = {k for k in full_targets if has_carbon(k)}
+
                     def full(p):
                         # the end state contains every reacting molecule of the gold end state,
                         # by-products included, so a route that skips the reagent does not count
-                        return full_targets <= set(p.states[-1].split("."))
+                        return full_targets <= norm_frags(p.states[-1])
+
+                    def org(p):
+                        # looser: only the carbon-containing gold molecules, so inorganic bookkeeping
+                        # (e.g. NaOH + H+ vs Na+ + H2O) does not count against a route
+                        return org_targets <= norm_frags(p.states[-1])
+
+                    def gold(p):
+                        return follows(gold_states, [norm_key(s) for s in p.states])
 
                     rec.update(n_gold_moves=n_moves, depth=depth, found=bool(paths),
                                full_top1=bool(paths) and full(paths[0]),
                                full_top3=any(full(p) for p in paths),
-                               gold_top1=bool(paths) and follows(gold_states, paths[0].states),
-                               gold_top3=any(follows(gold_states, p.states) for p in paths),
+                               org_top1=bool(paths) and org(paths[0]),
+                               org_top3=any(org(p) for p in paths),
+                               gold_top1=bool(paths) and gold(paths[0]),
+                               gold_top3=any(gold(p) for p in paths),
                                best_len=len(paths[0].moves) if paths else None,
                                logps=[round(p.logp, 2) for p in paths],
-                               paths=[{"moves": p.moves, "end": p.states[-1]} for p in paths], **info)
+                               paths=[{"moves": p.moves, "states": p.states} for p in paths], **info)
             except Exception as e:
                 rec["error"] = f"{type(e).__name__}: {e}"
             rec["seconds"] = round(time.time() - t0, 1)

@@ -21,24 +21,28 @@ def main() -> None:
     for r in recs:
         groups[(r["scorer"], "all")].append(r)
         groups[(r["scorer"], r["split"])].append(r)
-    print(f"{'scorer':8s} {'split':12s} {'n':>5s} {'skip':>5s} {'err':>4s} {'found':>6s} {'full@1':>7s} {'full@3':>7s} {'gold@1':>7s} {'gold@3':>7s} {'sec':>6s}")
+    cols = ["full_top1", "full_top3", "org_top1", "org_top3", "gold_top1", "gold_top3"]
+    print(f"{'scorer':8s} {'split':12s} {'n':>5s} {'skip':>5s} {'err':>4s} {'found':>6s} "
+          + " ".join(f"{c.replace('_top', '@'):>7s}" for c in cols) + f" {'sec':>6s}")
     for (scorer, split), rs in sorted(groups.items()):
         ok = [r for r in rs if "found" in r]
         n = len(ok) or 1
         print(f"{scorer:8s} {split:12s} {len(ok):5d} {sum('skipped' in r for r in rs):5d} {sum('error' in r for r in rs):4d} "
-              f"{sum(r['found'] for r in ok) / n:6.3f} {sum(r.get('full_top1', False) for r in ok) / n:7.3f} "
-              f"{sum(r.get('full_top3', False) for r in ok) / n:7.3f} {sum(r['gold_top1'] for r in ok) / n:7.3f} "
-              f"{sum(r['gold_top3'] for r in ok) / n:7.3f} {sum(r['seconds'] for r in ok) / n:6.1f}")
+              f"{sum(r['found'] for r in ok) / n:6.3f} "
+              + " ".join(f"{sum(r.get(c, False) for r in ok) / n:7.3f}" for c in cols)
+              + f" {sum(r['seconds'] for r in ok) / n:6.1f}")
     # per class, both scorers side by side (classes with >= 8 reactions)
     by = defaultdict(lambda: defaultdict(list))
     for r in recs:
         if "found" in r:
             by[r["class"]][r["scorer"]].append(r)
-    print("\nper class: gold route in top-3 (n)")
+    print("\nper class: found / full@3 / gold@3 (n)")
     for cls, d in sorted(by.items(), key=lambda x: -sum(len(v) for v in x[1].values())):
         if max(len(v) for v in d.values()) < 8:
             continue
-        print(f"  {cls[:40]:40s} " + "  ".join(f"{s} {sum(r['gold_top3'] for r in v) / len(v):.2f} ({len(v)})" for s, v in sorted(d.items())))
+        print(f"  {cls[:40]:40s} " + "  ".join(
+            f"{s} {sum(r['found'] for r in v) / len(v):.2f}/{sum(r.get('full_top3', False) for r in v) / len(v):.2f}"
+            f"/{sum(r['gold_top3'] for r in v) / len(v):.2f} ({len(v)})" for s, v in sorted(d.items())))
 
 
 if __name__ == "__main__":
