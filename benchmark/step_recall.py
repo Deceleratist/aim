@@ -36,6 +36,18 @@ def aim_view_smiles(state) -> str:
     return Chem.MolToSmiles(m, canonical=False)
 
 
+def state_norm(smiles: str) -> str | None:
+    """Map-free, stereo-free canonical SMILES of a state, H2 written one way ([HH]), for comparing a
+    candidate's product with the gold next state. None if it won't parse."""
+    m = Chem.MolFromSmiles(smiles)
+    if m is None:
+        return None
+    for a in m.GetAtoms():
+        a.SetAtomMapNum(0)
+    Chem.RemoveStereochemistry(m)
+    return ".".join(sorted("[HH]" if f == "[H][H]" else f for f in Chem.MolToSmiles(m).split(".")))
+
+
 def lone_pair_equivalent(move: list) -> list | None:
     """Same step written with the source atom's lone pair instead of the pi bond it sits in.
 

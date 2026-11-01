@@ -28,7 +28,9 @@ import pandas as pd
 import xgboost
 
 from benchmark.mech_uspto import convert
-from benchmark.step_recall import aim_view_smiles, lone_pair_equivalent
+from rdkit import Chem
+
+from benchmark.step_recall import aim_view_smiles, lone_pair_equivalent, state_norm
 from shared.ml_helper import aromatic_flags, make_fingerprint
 from shared.rules import run_next_step
 
@@ -64,8 +66,12 @@ def decode(x: np.ndarray) -> np.ndarray:
     return out
 
 
-def process_step(smiles, gold_map, clf):
-    _, mechs, mol, _ = run_next_step(smiles, True, None, False, True)
+def process_step(smiles, gold_map, clf, gold_next=None):
+    """gold_next: SMILES of the gold state after this step, given only when the step is a single
+    AIM move. Then 'state_proposed' records whether any candidate reaches that state, whatever its
+    move label (clean_mol keeps one label per product, so a reachable step can be listed under an
+    equivalent move, e.g. silicate ligand loss as a degenerate type 3; plan A8)."""
+    connected, mechs, mol, _ = run_next_step(smiles, True, None, False, True)
     m2i = {a.GetAtomMapNum(): a.GetIdx() for a in mol.GetAtoms() if a.GetAtomMapNum()}
     gold = [gold_map[0]] + [None if x is None else m2i[x] for x in gold_map[1:]]
     equivalent = False
@@ -82,6 +88,10 @@ def process_step(smiles, gold_map, clf):
            "n_candidates": len(scored), "n_kept": int((probs >= 0.5).sum()), "gold_index": gi,
            "p_gold": float(probs[gi]) if gi >= 0 else None,
            "rank_v121": int((probs > probs[gi]).sum()) + 1 if gi >= 0 else None}
+    if gold_next is not None:
+        target = state_norm(gold_next)
+        hits = [k for k, m in enumerate(connected) if state_norm(Chem.MolToSmiles(m)) == target]
+        rec.update(state_proposed=bool(hits), state_types=sorted({mechs[k][0] for k in hits}))
     return rec, fps, probs
 
 
@@ -122,7 +132,8 @@ def main() -> None:
                         "gold_move_map": s.aim_moves[0], "gold_type": s.aim_moves[0][0]}
                 try:
                     smiles = aim_view_smiles(s.start)
-                    rec, fps, probs = process_step(smiles, s.aim_moves[0], clf)
+                    rec, fps, probs = process_step(smiles, s.aim_moves[0], clf,
+                                                   s.smiles if len(s.aim_moves) == 1 else None)
                 except Exception as e:
                     fsteps.write(json.dumps({**base, "error": f"{type(e).__name__}: {e}"}) + "\n")
                     continue
