@@ -28,7 +28,7 @@ if str(root_dir) not in sys.path:
 # Now you can import it normally
 from shared.rules import run_next_step
 from shared.next_step import follow_on
-from shared.ml_helper import make_fingerprint
+from shared.ml_helper import aromatic_flags, make_fingerprint
 
 
 
@@ -107,9 +107,10 @@ def next_nodes(packed):
         print("Error in rule application")
         print(e)
         return (results, (unique_mech_count_local, test_set_mech_count_local, inchi_set_local))
+    arom = aromatic_flags(mol_inp)
     for i, product in enumerate(product_mols):
         if mechs[i][0] != 11:
-            fp = np.array(make_fingerprint(mol_inp, mechs[i]))
+            fp = np.array(make_fingerprint(mol_inp, mechs[i], arom))
             key = tuple(np.where(np.isnan(fp), None, fp))
             if key in unique_bitvectors:
                 test_set_mech_count_local += 1

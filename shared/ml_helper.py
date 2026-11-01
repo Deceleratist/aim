@@ -66,28 +66,15 @@ electronegativity_dict = {1: 2.2,
  52: 2.1,
  53: 2.66}
 
-_aromatic_cache = {"mol": None, "signature": None, "flags": None}
-
-
 def aromatic_flags(mol):
     """Aromaticity of every atom after re-perceiving it on a copy of `mol` (mol itself is untouched).
 
-    Perceiving aromaticity copies the molecule, which used to happen four times per candidate move.
-    The result is cached for the most recent molecule; the cache is reused only if the same object
-    still has the same atoms, charges, H counts and bond orders, so a changed molecule is recomputed.
+    Perceiving aromaticity copies the molecule. Code that fingerprints many candidate moves of the
+    same state should call this once and pass the result to make_fingerprint(..., arom=...).
     """
-    signature = (
-        tuple((a.GetAtomicNum(), a.GetFormalCharge(), a.GetTotalNumHs()) for a in mol.GetAtoms()),
-        tuple((b.GetBeginAtomIdx(), b.GetEndAtomIdx(), b.GetBondTypeAsDouble()) for b in mol.GetBonds()),
-    )
-    cache = _aromatic_cache
-    if cache["mol"] is mol and cache["signature"] == signature:
-        return cache["flags"]
     new_mol = Chem.Mol(mol)
     Chem.SetAromaticity(new_mol)
-    flags = [a.GetIsAromatic() for a in new_mol.GetAtoms()]
-    cache.update(mol=mol, signature=signature, flags=flags)
-    return flags
+    return [a.GetIsAromatic() for a in new_mol.GetAtoms()]
 
 
 def make_atom_fingerprint(atom, other_atom_idx=None, other_atoms=[], is_aromatic=None):
@@ -249,7 +236,9 @@ def new_bond_fingerprint(mol, a1_idx, a2_idx):
     return ring_size_bitstring
 
 
-def make_fingerprint(sm, mech):
+def make_fingerprint(sm, mech, arom=None):
+    """Fingerprint of one candidate move. `arom` = aromatic_flags(sm), passed in when fingerprinting
+    many moves of the same state (it is the same for all of them)."""
     mech_type = [np.nan] * 11
     mech_type[mech[0]] = 1
     atom_fps = []
@@ -257,7 +246,8 @@ def make_fingerprint(sm, mech):
     # Current fix for elimination mechanism that preserves the information of C-H bond atom index for future implementations
     if mech[0] in [8, 9]:
         mech[3] = None
-    arom = aromatic_flags(sm)
+    if arom is None:
+        arom = aromatic_flags(sm)
     for i in range(1, 5):
         if mech[i] is None:
             atom_fps.append(make_atom_fingerprint(None, other_atoms=mech[1:]))

@@ -20,7 +20,7 @@ import xgboost
 from rdkit import Chem
 
 from benchmark.mech_uspto import convert
-from shared.ml_helper import make_fingerprint
+from shared.ml_helper import aromatic_flags, make_fingerprint
 from shared.rules import run_next_step
 
 root_dir = Path(__file__).resolve().parents[1]
@@ -57,7 +57,8 @@ def evaluate_step(smiles: str, gold_map: list, clf) -> dict:
             gold, equivalent = alt, True
     proposed = gold in mechs
     scored = [i for i, m in enumerate(mechs) if m[0] != 11]
-    fps = np.array([make_fingerprint(mol_inp, list(mechs[i])) for i in scored], dtype=float)
+    arom = aromatic_flags(mol_inp)
+    fps = np.array([make_fingerprint(mol_inp, list(mechs[i]), arom) for i in scored], dtype=float)
     probs = clf.predict_proba(fps)[:, 1] if len(fps) else np.array([])
     result = {"proposed": proposed, "equivalent": equivalent, "n_candidates": len(mechs), "accepted": False, "rank": None, "p": None,
               "n_accepted": int((probs >= 0.5).sum())}

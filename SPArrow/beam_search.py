@@ -19,7 +19,7 @@ import numpy as np
 import xgboost
 from rdkit import Chem, RDLogger
 
-from shared.ml_helper import make_fingerprint
+from shared.ml_helper import aromatic_flags, make_fingerprint
 from shared.rules import run_next_step
 
 RDLogger.DisableLog("rdApp.*")
@@ -85,7 +85,8 @@ def expand(smiles: str, scorer: Scorer, top_m: int, screen_charges: bool = False
     products, mechs, mol, keep = candidates(smiles, screen_charges)
     if not keep:
         return []
-    fps = np.array([make_fingerprint(mol, list(mechs[i])) for i in keep], dtype=float)
+    arom = aromatic_flags(mol)
+    fps = np.array([make_fingerprint(mol, list(mechs[i]), arom) for i in keep], dtype=float)
     s = scorer(fps)
     logp = s - (s.max() + math.log(np.exp(s - s.max()).sum()))   # log-softmax over the candidates
     order = np.argsort(-logp)[:top_m]

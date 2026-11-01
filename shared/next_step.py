@@ -1,6 +1,6 @@
 from rdkit import Chem
 from .rules import execute_step
-from .ml_helper import make_fingerprint
+from .ml_helper import aromatic_flags, make_fingerprint
 from .rules_proton import run_next_step
 import numpy as np
 import os
@@ -180,11 +180,12 @@ def follow_on(next_mol, mech, model, screen_charges_enabled = True, hypervalent_
     except Exception as e:
         print(e)
         print(traceback.format_exc())
+    arom = aromatic_flags(mol_inp) if connected_mols else None
     for i, product in enumerate(connected_mols):
         if mechanism[i][0] == 11:
             # Do not consider H- H+ as part of the follow on steps
             continue
-        fp = np.array(make_fingerprint(mol_inp, mechanism[i]))
+        fp = np.array(make_fingerprint(mol_inp, mechanism[i], arom))
         pred = clf.predict(fp.reshape(1,-1))[0]
         if pred and i in clean_list:
             # If we are relying on the follow-on reaction to satisfy charges, it should only be balanced

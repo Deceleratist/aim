@@ -27,7 +27,7 @@ sys.path.insert(0, str(root_dir))
 sys.path.insert(0, str(root_dir / "SPArrow"))
 
 from beam_search import Scorer, beam_search, candidates, fragment_keys  # noqa: E402
-from shared.ml_helper import make_fingerprint  # noqa: E402
+from shared.ml_helper import aromatic_flags, make_fingerprint  # noqa: E402
 from shared.rules import run_next_step  # noqa: E402
 
 MOVE_NAMES = {0: "lone pair -> atom", 1: "lone pair -> bond (form + break)", 2: "bond -> atom", 3: "bond -> bond",
@@ -43,7 +43,8 @@ def describe(smiles: str, move: list, scorer: Scorer, screen_charges: bool):
     """Rank and softmax probability of `move` among the allowed candidates in state `smiles`, plus atom labels."""
     _, mechs, mol, keep_idx = candidates(smiles, screen_charges)
     keep = [list(mechs[i]) for i in keep_idx]
-    fps = np.array([make_fingerprint(mol, list(m)) for m in keep], dtype=float)
+    arom = aromatic_flags(mol)
+    fps = np.array([make_fingerprint(mol, list(m), arom) for m in keep], dtype=float)
     s = scorer(fps)
     p = np.exp(s - s.max()); p /= p.sum()
     i = keep.index(move) if move in keep else None

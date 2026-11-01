@@ -29,7 +29,7 @@ import xgboost
 
 from benchmark.mech_uspto import convert
 from benchmark.step_recall import aim_view_smiles, lone_pair_equivalent
-from shared.ml_helper import make_fingerprint
+from shared.ml_helper import aromatic_flags, make_fingerprint
 from shared.rules import run_next_step
 
 root_dir = Path(__file__).resolve().parents[1]
@@ -74,7 +74,8 @@ def process_step(smiles, gold_map, clf):
         if alt in mechs:
             gold, equivalent = alt, True
     scored = [list(m) for m in mechs if m[0] != 11]
-    fps = np.array([make_fingerprint(mol, list(m)) for m in scored], dtype=float) if scored else np.zeros((0, 182))
+    arom = aromatic_flags(mol)
+    fps = np.array([make_fingerprint(mol, list(m), arom) for m in scored], dtype=float) if scored else np.zeros((0, 182))
     probs = clf.predict_proba(fps)[:, 1] if len(fps) else np.array([])
     gi = scored.index(gold) if gold in scored else -1
     rec = {"proposed": gold in mechs, "equivalent": equivalent, "gold_type11": gold[0] == 11,
