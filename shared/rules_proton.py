@@ -288,23 +288,19 @@ def execute_step(mol_inp, kekulise = False,  screen_charges_enabled = True):
             charge += atom.GetFormalCharge()
         connected_mols, mechanisms = screen_charges(connected_mols, mechanisms, charge)
     
-    idx = 0
-    for mol in connected_mols:
+    # Drop candidates RDKit cannot sanitise (impossible valence) and keep the rest; see rules.py.
+    valid = []
+    for idx, mol in enumerate(connected_mols):
         try:
             Chem.SanitizeMol(mol)
-        except:
-            print('There was a sanitisation error')
-            timestamp = datetime.now().strftime("%d_%H%M%S")
-            opts = Chem.Draw.rdMolDraw2D.MolDrawOptions()
-            opts.addAtomIndices = True
-            Chem.Draw.MolToFile(mol, f'/home/rd611/aim/logs/debug{timestamp}.png', options=opts)
-            Chem.Draw.MolToFile(mol_inp, f'/home/rd611/aim/logs/_inp_{timestamp}.png', options=opts)
-            print(timestamp, mechanisms[idx])
-            break
-        if kekulise:
-            Chem.Kekulize(mol, clearAromaticFlags=True)
-        idx += 1
-    
+            if kekulise:
+                Chem.Kekulize(mol, clearAromaticFlags=True)
+        except Exception:
+            continue
+        valid.append(idx)
+    connected_mols = [connected_mols[i] for i in valid]
+    mechanisms = [mechanisms[i] for i in valid]
+
     return (connected_mols, mechanisms, mol_inp)
 
 

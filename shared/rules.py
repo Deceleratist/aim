@@ -622,21 +622,22 @@ def execute_step(mol_inp, kekulise = False, screen_charges_enabled = True):
     else:
         clean_list = list(range(len(connected_mols)))
     
-    idx = 0
-    for mol in connected_mols:
+    # A candidate RDKit cannot sanitise has an impossible valence: drop it and keep the rest.
+    # (This used to save debug images to a path on Richard's machine; without Chem.Draw imported
+    # that raised, and the caller lost every candidate for the state.)
+    valid = []
+    for idx, mol in enumerate(connected_mols):
         try:
             Chem.SanitizeMol(mol)
-        except:
-            print('There was a sanitisation error')
-            timestamp = datetime.now().strftime("%d_%H%M%S")
-            opts = Chem.Draw.rdMolDraw2D.MolDrawOptions()
-            opts.addAtomIndices = True
-            Chem.Draw.MolToFile(mol, f'/home/rd611/aim/logs/debug{timestamp}.png', options=opts)
-            Chem.Draw.MolToFile(mol_inp, f'/home/rd611/aim/logs/_inp_{timestamp}.png', options=opts)
-            print(timestamp, mechanisms[idx])
-            break
-        if kekulise:
-            Chem.Kekulize(mol, clearAromaticFlags=True)
-        idx += 1
-    
+            if kekulise:
+                Chem.Kekulize(mol, clearAromaticFlags=True)
+        except Exception:
+            continue
+        valid.append(idx)
+    if len(valid) < len(connected_mols):
+        new_pos = {old: new for new, old in enumerate(valid)}
+        clean_list = [new_pos[i] for i in clean_list if i in new_pos]
+        connected_mols = [connected_mols[i] for i in valid]
+        mechanisms = [mechanisms[i] for i in valid]
+
     return (connected_mols, mechanisms, mol_inp, clean_list)
