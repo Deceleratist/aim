@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 import numpy as np
+import pytest
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
@@ -23,8 +24,11 @@ STATES = [
 
 
 def original_module():
-    src = subprocess.run(["git", "show", "45981633:shared/ml_helper.py"], cwd=root,
-                         capture_output=True, text=True, check=True).stdout
+    try:
+        src = subprocess.run(["git", "show", "45981633:shared/ml_helper.py"], cwd=root,
+                             capture_output=True, text=True, check=True).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pytest.skip("needs git (not available on Pat compute nodes)")
     spec = importlib.util.spec_from_loader("ml_helper_original", loader=None)
     mod = importlib.util.module_from_spec(spec)
     exec(src, mod.__dict__)
