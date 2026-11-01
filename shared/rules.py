@@ -1,5 +1,6 @@
 from rdkit import Chem # pyright: ignore[reportMissingImports]
 from datetime import datetime
+import os
 import sys
 ptable = Chem.GetPeriodicTable()
 from .electronegativity import electronegativity
@@ -371,6 +372,20 @@ def break_bond_sink(new_mol, order, a, b1, b2, mechanisms, connected_mols):
         mechanisms.append([3, i, j, k, l])
     return (mechanisms, connected_mols)
 
+# Ligand loss from a neutral 5-coordinate phosphorane, e.g. Ph3P(OR)(NR-NR) -> Ph3P+-OR + hydrazide
+# (Mitsunobu) or Ph3P(OR)Br -> Ph3P+-OR + Br- (Appel). Off by default; set AIM_PHOSPHORANE_LIGAND_LOSS=1.
+# Only P with five single-bonded neighbours (no P=O / P=C), leaving N, O or halogen. Anionic
+# 5-coordinate silicates already lose ligands through the charge -1 branch below. Approved by Junrui 1 Nov
+# for P and Si only; S (Swern) stays as direct substitution at S+.
+PHOSPHORANE_LIGAND_LOSS = os.environ.get("AIM_PHOSPHORANE_LIGAND_LOSS", "0") == "1"
+LIGAND_LOSS_LEAVING = {7, 8, 9, 17, 35, 53}
+
+
+def is_phosphorane(atom):
+    return (atom.GetAtomicNum() == 15 and atom.GetFormalCharge() == 0 and atom.GetTotalDegree() == 5
+            and all(b.GetBondTypeAsDouble() == 1 for b in atom.GetBonds()))
+
+
 def carbocat(mol, sink_idx, connected_mols, mechanisms):
     b = mol.GetBondWithIdx(sink_idx)
     if b.GetProp('sink_bond_atom') == 'both':
@@ -384,6 +399,9 @@ def carbocat(mol, sink_idx, connected_mols, mechanisms):
     if mol.GetAtomWithIdx(j).GetAtomicNum() == 6:
         if mol.GetAtomWithIdx(j).GetTotalNumHs() > 1:
             return (mechanisms, connected_mols)
+    elif PHOSPHORANE_LIGAND_LOSS and is_phosphorane(mol.GetAtomWithIdx(j)) and \
+            mol.GetAtomWithIdx(l).GetAtomicNum() in LIGAND_LOSS_LEAVING:
+        pass
     else:
         if mol.GetAtomWithIdx(j).GetFormalCharge() > -1:
             return (mechanisms, connected_mols)
