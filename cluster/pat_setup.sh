@@ -20,15 +20,19 @@ fi
 git -C ~/aim fetch -q fork && git -C ~/aim status -sb | head -1
 
 # 2. a Python >= 3.10 (RDKit 2025.3 wheels need it). Prefer the system one, then modules, then uv.
-PY=""
-for cand in python3.13 python3.12 python3.11 python3.10 python3; do
-    if command -v "$cand" >/dev/null && "$cand" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
-        PY=$(command -v "$cand"); break
-    fi
-done
+#    Pat (Nov 2026): system python is 3.9 and the anaconda module is a no-op, so pass a base
+#    interpreter explicitly, e.g. BASE_PYTHON=~/venvs/n6q311/bin/python3.11 bash pat_setup.sh
+#    (only its interpreter is used; that env itself is not modified).
+PY="${BASE_PYTHON:-}"
 if [ -z "$PY" ]; then
-    echo "No system Python >= 3.10. Python modules available:"; module -t avail 2>&1 | grep -i python || true
-    echo "Load one (module load ...) and re-run, or install uv: see findings/lessons.md"; exit 1
+    for cand in python3.13 python3.12 python3.11 python3.10 python3; do
+        if command -v "$cand" >/dev/null && "$cand" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+            PY=$(command -v "$cand"); break
+        fi
+    done
+fi
+if [ -z "$PY" ]; then
+    echo "No Python >= 3.10 found; set BASE_PYTHON=/path/to/python3.1x and re-run"; exit 1
 fi
 echo "using $PY ($($PY --version))"
 
