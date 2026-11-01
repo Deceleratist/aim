@@ -71,10 +71,11 @@ end_smiles = "C(=O)(CN1C(=O)CCc2ncccc21)Nc1scc(Br)c1-c1nccs1.C1CCC(NC(=O)NC2CCCC
 # sm_smiles = "OC1CCN(C(OC(C)(C)C)=O)CC1.Oc1ccc(C#N)cc1.c1ccccc1P(c1ccccc1)c1ccccc1.O=C(N=NC(=O)OCC)OCC"#
 # end_smiles = "CC(C)(C)OC(=O)N1CCC(Oc2ccc(C#N)cc2)CC1.CCOC(=O)NNC(=O)OCC.O=P(c1ccccc1)(c1ccccc1)c1ccccc1"
 
-print("Starting SMILES:", sm_smiles)
-print("Ending SMILES:", end_smiles)
-try:
-	run_parallel(sm_smiles, end_smiles, 0, no_duplicates, force_depth, depth_limit, follow_on_enabled, aromatic, screen_charges_enabled, hypervalent_enabled)
-except Exception as e:
-	print(e)
+if __name__ == "__main__":
+	print("Starting SMILES:", sm_smiles)
+	print("Ending SMILES:", end_smiles)
+	try:
+		run_parallel(sm_smiles, end_smiles, 0, no_duplicates, force_depth, depth_limit, follow_on_enabled, aromatic, screen_charges_enabled, hypervalent_enabled)
+	except Exception as e:
+		print(e)
 		

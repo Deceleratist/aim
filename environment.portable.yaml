@@ -1,0 +1,21 @@
+# Cross-platform environment (environment.yaml is a Linux export with pinned builds).
+# conda env create -f environment.portable.yaml
+name: aim
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - pip
+  - numpy
+  - pandas
+  - scikit-learn=1.7.0   # newer releases break XGBClassifier.load_model in xgboost 3.0.2
+  - matplotlib
+  - ipykernel
+  - ipywidgets
+  - flask
+  - pytest
+  - pip:
+      - rdkit==2025.3.2
+      - xgboost==3.0.2
+      - anytree==2.13.0
+      - shap

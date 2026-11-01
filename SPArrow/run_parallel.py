@@ -47,6 +47,16 @@ def product_subset(reactant, product):
 last_save = time.time()
 save_interval = 3600
 
+# Module-level so it can be pickled under the "spawn" start method (Windows/macOS),
+# where workers do not inherit globals set in the parent process
+def init_worker(model_path, bitvectors, inchis):
+    global clf, unique_bitvectors, inchis_set
+    clf = xgboost.XGBClassifier()
+    clf.load_model(model_path)
+    unique_bitvectors = bitvectors
+    inchis_set = inchis
+    RDLogger.DisableLog("rdApp.*")
+
 # Save the tree before job timeout
 def save_tree(signum, frame, job_name, product_nodes):
     print("Terminating safely")
@@ -271,7 +281,8 @@ def run_parallel(r_smiles, p_smiles, job_name, no_duplicates=False, force_depth=
     model_name = "v121"
     print("Using model ", model_name)
     
-    with open(f"models/{model_name}/unique_bitvectors.txt", "r") as f:
+    model_dir = root_dir / "models" / model_name
+    with open(model_dir / "unique_bitvectors.txt", "r") as f:
         for line in f:
             fp_elements = []
             for x in line.strip().split(','):
@@ -341,12 +352,7 @@ def run_parallel(r_smiles, p_smiles, job_name, no_duplicates=False, force_depth=
     inchi2 = Chem.MolToInchi(end, options='/FixedH')
     RDLogger.DisableLog('rdApp.*')
 
-    def init_worker():
-        global clf
-        clf = xgboost.XGBClassifier()
-        clf.load_model(f'models/{model_name}/xg_model.json')
-        RDLogger.DisableLog("rdApp.*")
-
+    model_path = str(model_dir / "xg_model.json")
 
 
     while step_no < depth_limit:
@@ -373,7 +379,8 @@ def run_parallel(r_smiles, p_smiles, job_name, no_duplicates=False, force_depth=
 
         with Manager() as manager:
             found_event = manager.Event()
-            with Pool(processes=cpu_count(), initializer=init_worker) as pool:
+            with Pool(processes=cpu_count(), initializer=init_worker,
+                      initargs=(model_path, unique_bitvectors, inchis_set)) as pool:
                 all_outputs = pool.map(next_nodes, [(task, found_event) for task in tasks])
         
         outputs = [a[0] for a in all_outputs]

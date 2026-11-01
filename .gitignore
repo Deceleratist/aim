@@ -27,3 +27,7 @@ molecule-web-app/backend/chain/
 /training_current
 /shared/__pycache__/
 /SPArrow/__pycache__
+
+# added by jz
+__pycache__/
+.pytest_cache/
