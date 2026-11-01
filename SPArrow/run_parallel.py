@@ -47,6 +47,13 @@ def product_subset(reactant, product):
 last_save = time.time()
 save_interval = 3600
 
+
+def n_workers():
+    """CPUs this process may use: the Slurm allocation on a cluster, not the whole node."""
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return cpu_count()
+
 # Module-level so it can be pickled under the "spawn" start method (Windows/macOS),
 # where workers do not inherit globals set in the parent process
 def init_worker(model_path, bitvectors, inchis):
@@ -379,7 +386,7 @@ def run_parallel(r_smiles, p_smiles, job_name, no_duplicates=False, force_depth=
 
         with Manager() as manager:
             found_event = manager.Event()
-            with Pool(processes=cpu_count(), initializer=init_worker,
+            with Pool(processes=n_workers(), initializer=init_worker,
                       initargs=(model_path, unique_bitvectors, inchis_set)) as pool:
                 all_outputs = pool.map(next_nodes, [(task, found_event) for task in tasks])
         
