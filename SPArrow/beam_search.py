@@ -68,10 +68,21 @@ class Path_:
     states: list = field(default_factory=list, compare=False)   # state keys after each move
 
 
-def expand(smiles: str, scorer: Scorer, top_m: int):
+def candidates(smiles: str, screen_charges: bool):
+    """AIM's candidate moves for a state (type 11 excluded).
+
+    With screen_charges, Richard's existing rule (rules.screen_charges) applies: in a net-negative
+    (basic) state no product may contain a cation, in a net-positive (acidic) state no anion.
+    """
+    products, mechs, mol, allowed = run_next_step(smiles, True, None, screen_charges, True)
+    allowed = set(allowed)
+    keep = [i for i, m in enumerate(mechs) if m[0] != 11 and i in allowed]
+    return products, mechs, mol, keep
+
+
+def expand(smiles: str, scorer: Scorer, top_m: int, screen_charges: bool = False):
     """Children of a state: (log P(move), move, product SMILES), best top_m only."""
-    products, mechs, mol, _ = run_next_step(smiles, True, None, False, True)
-    keep = [i for i, m in enumerate(mechs) if m[0] != 11]
+    products, mechs, mol, keep = candidates(smiles, screen_charges)
     if not keep:
         return []
     fps = np.array([make_fingerprint(mol, list(mechs[i])) for i in keep], dtype=float)
@@ -89,7 +100,8 @@ def expand(smiles: str, scorer: Scorer, top_m: int):
 
 
 def beam_search(start_smiles: str, target_fragments: set[str], scorer: Scorer, depth: int,
-                beam: int = 10, top_m: int = 10, k: int = 3) -> tuple[list[Path_], dict]:
+                beam: int = 10, top_m: int = 10, k: int = 3,
+                screen_charges: bool = False) -> tuple[list[Path_], dict]:
     """Return up to k complete paths (best first) whose final state contains all target fragments."""
     frontier = [Path_(0.0, start_smiles)]
     done: list[Path_] = []
@@ -100,7 +112,7 @@ def beam_search(start_smiles: str, target_fragments: set[str], scorer: Scorer, d
         for p in frontier:
             n_expanded += 1
             try:
-                kids = expand(p.smiles, scorer, top_m)
+                kids = expand(p.smiles, scorer, top_m, screen_charges)
             except Exception:
                 continue
             for lp, move, smi in kids:
