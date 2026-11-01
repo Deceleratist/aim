@@ -34,11 +34,37 @@ from benchmark.ranking_data import _hash01, split_of  # noqa: E402
 from benchmark.step_recall import aim_view_smiles  # noqa: E402
 
 
+_SEPARATED = Chem.MolFromSmarts("[P+,S+]-[O-,N-,C-]")
+
+
+def double_bond_form(frag: str) -> str:
+    """Ph3P+-O- and Ph3P=O are one molecule drawn two ways (likewise sulfoxides and P/S ylides).
+    AIM's moves leave the charge-separated form while the converter's gold states keep P=O, so
+    without this every Mitsunobu/Appel route failed full/gold matching (J42). Writes the P=/S= form."""
+    m = Chem.MolFromSmiles(frag)
+    if m is None or not m.HasSubstructMatch(_SEPARATED):
+        return frag
+    rw, used = Chem.RWMol(m), set()
+    for i, j in m.GetSubstructMatches(_SEPARATED):
+        if used & {i, j}:
+            continue
+        used |= {i, j}
+        rw.GetBondBetweenAtoms(i, j).SetBondType(Chem.BondType.DOUBLE)
+        for k in (i, j):
+            rw.GetAtomWithIdx(k).SetFormalCharge(0)
+    try:
+        Chem.SanitizeMol(rw)
+    except Exception:
+        return frag
+    return Chem.MolToSmiles(rw)
+
+
 def norm_key(smiles: str) -> str:
-    """state_key with H2 written one way. The converter's states keep H2 as [H][H] while AIM writes
-    [HH], so without this every NaH reaction failed full/gold matching even on the textbook route.
-    (RemoveHs with removeOnlyHNeighbors deletes H2 altogether, so it is rewritten here instead.)"""
-    return ".".join(sorted("[HH]" if f == "[H][H]" else f for f in state_key(smiles).split(".")))
+    """state_key with H2 written one way and P/S charge-separated forms written as double bonds.
+    The converter's states keep H2 as [H][H] while AIM writes [HH], so without this every NaH
+    reaction failed full/gold matching even on the textbook route. (RemoveHs with
+    removeOnlyHNeighbors deletes H2 altogether, so it is rewritten here instead.)"""
+    return ".".join(sorted("[HH]" if f == "[H][H]" else double_bond_form(f) for f in state_key(smiles).split(".")))
 
 
 def norm_frags(state: str) -> set[str]:
