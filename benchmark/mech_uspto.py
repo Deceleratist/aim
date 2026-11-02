@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 
 from rdkit import Chem, RDLogger
 
+from shared import rules
+
 RDLogger.DisableLog("rdApp.*")
 ptable = Chem.GetPeriodicTable()
 
@@ -319,7 +321,10 @@ def _candidates(a: list[Arrow]):
     a0 = a[0]
     if bond(a0):
         k, i, z = bond_parts(a0)
-        # k is H: the proton leaves as bare H+ with no base, which AIM has no move for
+        # k is H: the proton leaves as bare H+ with no base. AIM has a move for it only with
+        # AIM_PROTON_RELEASE=1 (plan E3), written as a heterolysis with the H slot empty
+        if rules.PROTON_RELEASE and z == i and _is_h(k) and k.host == i.map:
+            yield [10, None, None, None, i.aim], 1             # H+ lost to the solvent
         if _is_h(i) and not _is_h(z):
             yield [6, None, z.aim, k.aim, None], 1             # hydride to atom
         if z == i and not _is_h(i) and not k.is_h:
@@ -357,6 +362,9 @@ def _decompose(pending: list[Arrow], state: ArrowState, budget: list[int]):
     if budget[0] < 0:
         return None
     for move, n in _candidates(pending):
+        if move[0] == 10 and move[3] is None and \
+                state.mol.GetAtomWithIdx(state.map_to_idx[move[4]]).GetAtomicNum() not in (7, 8, 16):
+            continue   # E3 covers H+ loss from O, N, S only; C-H loss (e.g. tBu+ -> isobutylene) stays unmatched
         nxt = state.copy()
         touched = set()
         for arw in pending[:n]:

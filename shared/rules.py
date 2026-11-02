@@ -419,6 +419,39 @@ def break_bond_sink(new_mol, order, a, b1, b2, mechanisms, connected_mols):
 # 5-coordinate silicates already lose ligands through the charge -1 branch below. Approved by Junrui 1 Nov
 # for P and Si only; S (Swern) stays as direct substitution at S+.
 PHOSPHORANE_LIGAND_LOSS = os.environ.get("AIM_PHOSPHORANE_LIGAND_LOSS", "0") == "1"
+
+# Plan E3: an H on an O+, N+ or S+ leaves to the solvent as bare H+, with no base drawn (acid catalysis
+# as the dataset draws it). Not in basic (net-negative) mixtures, where a named base takes the proton.
+# Written as a heterolysis [10, None, None, None, X]: X keeps the electrons, the empty slot is the
+# implicit H, so the fingerprint is unchanged. Approved by Junrui 2 Nov; off by default,
+# set AIM_PROTON_RELEASE=1.
+PROTON_RELEASE = os.environ.get("AIM_PROTON_RELEASE", "0") == "1"
+
+
+def proton_release(mol, connected_mols, mechanisms):
+    if sum(a.GetFormalCharge() for a in mol.GetAtoms()) < 0:
+        return (mechanisms, connected_mols)
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() not in (7, 8, 16) or atom.GetFormalCharge() != 1:
+            continue
+        explicit = [n.GetIdx() for n in atom.GetNeighbors() if n.GetAtomicNum() == 1]
+        if not explicit and atom.GetTotalNumHs() == 0:
+            continue
+        new_mol = Chem.RWMol(mol)
+        x = new_mol.GetAtomWithIdx(atom.GetIdx())
+        if explicit:                    # the H is an atom of its own (e.g. picked up from a free H+)
+            new_mol.RemoveBond(atom.GetIdx(), explicit[0])
+            h = new_mol.GetAtomWithIdx(explicit[0])
+        else:
+            x.SetNumExplicitHs(atom.GetTotalNumHs() - 1)
+            x.SetNoImplicit(True)
+            h = new_mol.GetAtomWithIdx(new_mol.AddAtom(Chem.Atom(1)))
+        h.SetFormalCharge(1)
+        h.SetNoImplicit(True)
+        x.SetFormalCharge(0)
+        connected_mols.append(new_mol.GetMol())
+        mechanisms.append([10, None, None, None, atom.GetIdx()])
+    return (mechanisms, connected_mols)
 LIGAND_LOSS_LEAVING = {7, 8, 9, 17, 35, 53}
 
 
@@ -670,6 +703,9 @@ def execute_step(mol_inp, kekulise = False, screen_charges_enabled = True):
 
     for sink_idx, sink_type in sinks_bonds.items():
         mechanisms, connected_mols = carbocat(mol_inp, sink_idx, connected_mols, mechanisms)
+
+    if PROTON_RELEASE:
+        mechanisms, connected_mols = proton_release(mol_inp, connected_mols, mechanisms)
 
     connected_mols, mechanisms = clean_mol(connected_mols, mechanisms, mol_inp)
 
