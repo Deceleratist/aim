@@ -102,13 +102,17 @@ def expand(smiles: str, scorer: Scorer, top_m: int, screen_charges: bool = False
 
 def beam_search(start_smiles: str, target_fragments: set[str], scorer: Scorer, depth: int,
                 beam: int = 10, top_m: int = 10, k: int = 3,
-                screen_charges: bool = False) -> tuple[list[Path_], dict]:
-    """Return up to k complete paths (best first) whose final state contains all target fragments."""
+                screen_charges: bool = False, move_bonus: float = 0.0) -> tuple[list[Path_], dict]:
+    """Return up to k complete paths (best first) whose final state contains all target fragments.
+
+    move_bonus (plan B8) is added to the score of every move, so a long route of likely moves can beat
+    a short route of unlikely ones (R15: the 3-move OH- shortcut beat the 6-move Mitsunobu route).
+    The scores returned then include the bonus."""
     frontier = [Path_(0.0, start_smiles)]
     done: list[Path_] = []
     seen_best: dict[str, float] = {}
     n_expanded = 0
-    for _ in range(depth):
+    for level in range(depth):
         children = []
         for p in frontier:
             n_expanded += 1
@@ -118,7 +122,7 @@ def beam_search(start_smiles: str, target_fragments: set[str], scorer: Scorer, d
                 continue
             for lp, move, smi in kids:
                 key = state_key(smi)
-                total = p.logp + lp
+                total = p.logp + lp + move_bonus
                 if seen_best.get(key, -math.inf) >= total:
                     continue        # reached the same state more plausibly before
                 seen_best[key] = total
@@ -128,10 +132,12 @@ def beam_search(start_smiles: str, target_fragments: set[str], scorer: Scorer, d
                 else:
                     children.append(child)
         done.sort(key=lambda x: -x.logp)
-        # stop once k complete paths are better than anything still open
+        # stop once k complete paths are better than anything still open could become
+        # (each further move adds at most move_bonus, since log P <= 0)
         children.sort(key=lambda x: -x.logp)
         frontier = children[:beam]
-        if len(done) >= k and (not frontier or done[k - 1].logp >= frontier[0].logp):
+        best_open = frontier[0].logp + move_bonus * (depth - level - 1) if frontier else -math.inf
+        if len(done) >= k and done[k - 1].logp >= best_open:
             break
         if not frontier:
             break

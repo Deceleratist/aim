@@ -118,6 +118,7 @@ def main() -> None:
     parser.add_argument("--screen-charges", action=argparse.BooleanOptionalAction, default=True,
                         help="acid/base charge screen (default on since R17; --no-screen-charges for J29-style runs)")
     parser.add_argument("--only_class", default=None, help="sample only test reactions of this class")
+    parser.add_argument("--move-bonus", type=float, default=0.0, help="score added per move (plan B8)")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
@@ -142,7 +143,7 @@ def main() -> None:
                     start, targets, gold_states, n_moves, full_targets = g
                     depth = min(n_moves + 2, 14)
                     paths, info = beam_search(start, targets, scorer, depth=depth, beam=args.beam,
-                                              screen_charges=args.screen_charges)
+                                              screen_charges=args.screen_charges, move_bonus=args.move_bonus)
 
                     org_targets = {k for k in full_targets if has_carbon(k)}
 
