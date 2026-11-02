@@ -1,4 +1,4 @@
-"""Sharper charge screen (plan E1f, AIM_SHARP_CHARGE_SCREEN=1).
+"""Sharper charge screen (plan E1f; the default since R17, AIM_SHARP_CHARGE_SCREEN=0 turns it off).
 
 The reductive-amination state is a trimmed version of mech-USPTO row 21487: aldehyde, morpholine,
 H+ and Na+ BH3CN- (net +1, so acidic).

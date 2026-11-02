@@ -85,9 +85,9 @@ def strong_ions(mol):
 
 
 def screen_charges_sharp(list_mol, charge, parent):
-    """Plan E1f (AIM_SHARP_CHARGE_SCREEN=1): in a net-positive (acidic) mixture drop only moves that
-    create a strongly basic anion; in a net-negative (basic) mixture only moves that create a strongly
-    acidic cation. Ions already present, and weak ones (halide, carboxylate, BH3CN-), are allowed,
+    """Plan E1f, the default (AIM_SHARP_CHARGE_SCREEN=0 restores Richard's screen): in a net-positive
+    (acidic) mixture drop only moves that create a strongly basic anion; in a net-negative (basic)
+    mixture only moves that create a strongly acidic cation. Ions already present, and weak ones (halide, carboxylate, BH3CN-), are allowed,
     unlike screen_charges, which rejects any charged atom (and so any spectator anion; R16)."""
     if charge == 0:
         return list(range(len(list_mol)))
@@ -677,7 +677,7 @@ def execute_step(mol_inp, kekulise = False, screen_charges_enabled = True):
         charge = 0
         for atom in mol_inp.GetAtoms():
             charge += atom.GetFormalCharge()
-        if os.environ.get("AIM_SHARP_CHARGE_SCREEN") == "1":
+        if os.environ.get("AIM_SHARP_CHARGE_SCREEN", "1") != "0":
             clean_list = screen_charges_sharp(connected_mols, charge, mol_inp)
         else:
             clean_list = screen_charges(connected_mols, charge)

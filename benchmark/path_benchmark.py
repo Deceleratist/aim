@@ -115,7 +115,8 @@ def main() -> None:
     parser.add_argument("--chunk", type=int, default=0)
     parser.add_argument("--nchunks", type=int, default=1)
     parser.add_argument("--beam", type=int, default=10)
-    parser.add_argument("--screen-charges", action="store_true", help="apply AIM's acid/base charge screen")
+    parser.add_argument("--screen-charges", action=argparse.BooleanOptionalAction, default=True,
+                        help="acid/base charge screen (default on since R17; --no-screen-charges for J29-style runs)")
     parser.add_argument("--only_class", default=None, help="sample only test reactions of this class")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()

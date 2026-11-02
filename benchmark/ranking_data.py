@@ -12,7 +12,7 @@ candidate moves. One pass gives:
 Fingerprints are stored as uint8 (0, 1, 255 = NaN/unused).
 Splits (fixed, reproducible): 'test_class' = whole held-out reaction classes; 'test_random' =
 10 % of the remaining reactions (by row hash); 'train' = the rest.
-AIM_TRAIN_HALF_OF=<class> (plan E1c) moves half of that held-out class's reactions (by row hash)
+AIM_TRAIN_HALF_OF=<class>[,<class>] (plan E1c) moves half of each named held-out class's reactions (by row hash)
 into 'train'; the other half stays 'test_class'. Every tool that calls split_of follows it.
 
 python -m benchmark.ranking_data --chunk 3 --nchunks 128 --out <dir>
@@ -56,7 +56,7 @@ def _hash01(*parts) -> float:
 
 def split_of(row: int, cls: str) -> str:
     if cls in HELD_OUT_CLASSES:
-        if cls == os.environ.get("AIM_TRAIN_HALF_OF") and _hash01("half", row) < 0.5:
+        if cls in os.environ.get("AIM_TRAIN_HALF_OF", "").split(",") and _hash01("half", row) < 0.5:
             return "train"
         return "test_class"
     return "test_random" if _hash01("split", row) < 0.10 else "train"
