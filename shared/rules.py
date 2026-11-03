@@ -455,6 +455,47 @@ def proton_release(mol, connected_mols, mechanisms):
 LIGAND_LOSS_LEAVING = {7, 8, 9, 17, 35, 53}
 
 
+# Plan E1h: halophilic attack, the first Appel / Corey-Fuchs step: a phosphine attacks a halogen of a
+# polyhalomethane and the C-X bond breaks onto carbon (PPh3 + CBr4 -> Ph3P+-Br + -CBr3). Kept narrow:
+# nucleophile = neutral 3-coordinate P with single bonds only; X = Cl, Br, I on an sp3 C that carries
+# at least two more halogens (the carbanion left behind is stabilised by them). Type-1 move
+# [1, P, X, None, C], as the converter writes it. Approved by Junrui 3 Nov; off by default,
+# set AIM_HALOPHILIC_ATTACK=1.
+HALOPHILIC_ATTACK = os.environ.get("AIM_HALOPHILIC_ATTACK", "0") == "1"
+HALOGENS = {9, 17, 35, 53}
+
+
+def halophilic_attack(mol, connected_mols, mechanisms):
+    phosphines = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 15 and a.GetFormalCharge() == 0
+                  and a.GetDegree() == 3 and all(b.GetBondTypeAsDouble() == 1 for b in a.GetBonds())]
+    if not phosphines:
+        return (mechanisms, connected_mols)
+    targets = []
+    for x in mol.GetAtoms():
+        if x.GetAtomicNum() not in (17, 35, 53) or x.GetFormalCharge() != 0 or x.GetDegree() != 1:
+            continue
+        c = x.GetNeighbors()[0]
+        if c.GetAtomicNum() != 6 or c.GetFormalCharge() != 0 or any(b.GetBondTypeAsDouble() != 1 for b in c.GetBonds()):
+            continue
+        if sum(n.GetAtomicNum() in HALOGENS for n in c.GetNeighbors()) >= 3:
+            targets.append((x.GetIdx(), c.GetIdx()))
+    for p in phosphines:
+        for xi, ci in targets:
+            new_mol = Chem.RWMol(mol)
+            n_h = new_mol.GetAtomWithIdx(ci).GetTotalNumHs()
+            new_mol.RemoveBond(xi, ci)
+            new_mol.AddBond(p.GetIdx(), xi, Chem.BondType.SINGLE)
+            pa, ca = new_mol.GetAtomWithIdx(p.GetIdx()), new_mol.GetAtomWithIdx(ci)
+            pa.SetFormalCharge(1)
+            pa.SetNoImplicit(True)
+            ca.SetFormalCharge(-1)
+            ca.SetNumExplicitHs(n_h)
+            ca.SetNoImplicit(True)
+            connected_mols.append(new_mol.GetMol())
+            mechanisms.append([1, p.GetIdx(), xi, None, ci])
+    return (mechanisms, connected_mols)
+
+
 def is_phosphorane(atom):
     return (atom.GetAtomicNum() == 15 and atom.GetFormalCharge() == 0 and atom.GetTotalDegree() == 5
             and all(b.GetBondTypeAsDouble() == 1 for b in atom.GetBonds()))
@@ -706,6 +747,9 @@ def execute_step(mol_inp, kekulise = False, screen_charges_enabled = True):
 
     if PROTON_RELEASE:
         mechanisms, connected_mols = proton_release(mol_inp, connected_mols, mechanisms)
+
+    if HALOPHILIC_ATTACK:
+        mechanisms, connected_mols = halophilic_attack(mol_inp, connected_mols, mechanisms)
 
     connected_mols, mechanisms = clean_mol(connected_mols, mechanisms, mol_inp)
 
