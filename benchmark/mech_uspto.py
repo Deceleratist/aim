@@ -176,7 +176,9 @@ class ArrowState:
         nonbonding = ptable.GetNOuterElecs(z) - bonded - a.GetFormalCharge()
         if nonbonding < 0:
             return False
-        limit = 2 if z <= 2 else 8 if z <= 10 else 12
+        # Cl and Br never expand their octet in this chemistry (a neutral Br bonded to both P and C
+        # made the Appel gold states unsanitisable, E1d); P, S, Si and hypervalent I may
+        limit = 2 if z <= 2 else 8 if z <= 10 or z in (17, 35) else 12
         return nonbonding + 2 * bonded <= limit
 
     def snapshot(self) -> str | None:
