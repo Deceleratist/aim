@@ -20,7 +20,8 @@ def heterolyses(smiles):
     _, mechs, mol, _ = rules.run_next_step(smiles, True, None, False, True)
     idx2map = {a.GetIdx(): a.GetAtomMapNum() for a in mol.GetAtoms()}
     sym = {a.GetIdx(): a.GetSymbol() for a in mol.GetAtoms()}
-    return {(sym[m[3]], idx2map[m[3]], sym[m[4]], idx2map[m[4]]) for m in mechs if m[0] == 10}
+    # m[3] is None for H+ lost to the solvent (E3), which has no departing heavy atom
+    return {(sym[m[3]], idx2map[m[3]], sym[m[4]], idx2map[m[4]]) for m in mechs if m[0] == 10 and m[3] is not None}
 
 
 @pytest.fixture

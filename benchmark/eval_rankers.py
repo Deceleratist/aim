@@ -24,6 +24,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", required=True)
     parser.add_argument("--model", action="append", default=[], help="name=path to an XGBRanker json")
+    parser.add_argument("--by", choices=["step", "class", "split"], default="step",
+                        help="group results by step number, reaction class or split")
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
     data_dir = Path(args.data)
@@ -40,7 +42,8 @@ def main() -> None:
     qs = list(dict.fromkeys(qid))
     by_step = defaultdict(list)
     for q in qs:
-        by_step[steps[q]["step"] + 1].append(q)
+        key = steps[q]["step"] + 1 if args.by == "step" else steps[q][args.by]
+        by_step[key].append(q)
     n_rows = len({steps[q]["row"] for q in qs})
     print(f"{len(qs)} steps from {n_rows} reactions; top-k = gold among the k best of all candidates "
           f"(ties pessimistic); top10 = survives the beam's per-state cut")
@@ -55,7 +58,7 @@ def main() -> None:
 
     head = f"  {'model':10s} {'n':>5s} {'top1':>6s} {'top3':>6s} {'top10':>6s} {'median':>7s}"
     for title, block in [("all steps", results["overall"])] + \
-            [(f"step {k}", v) for k, v in results["by_step"].items()]:
+            [(f"{args.by} {k}", v) for k, v in results["by_step"].items()]:
         print(f"\n[{title}]\n{head}")
         for name in names:
             r = block[name]

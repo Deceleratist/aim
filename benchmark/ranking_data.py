@@ -72,12 +72,14 @@ def decode(x: np.ndarray) -> np.ndarray:
     return out
 
 
-def process_step(smiles, gold_map, clf, gold_next=None):
+def process_step(smiles, gold_map, clf, gold_next=None, screen=False):
     """gold_next: SMILES of the gold state after this step, given only when the step is a single
     AIM move. Then 'state_proposed' records whether any candidate reaches that state, whatever its
     move label (clean_mol keeps one label per product, so a reachable step can be listed under an
-    equivalent move, e.g. silicate ligand loss as a degenerate type 3; plan A8)."""
-    connected, mechs, mol, _ = run_next_step(smiles, True, None, False, True)
+    equivalent move, e.g. silicate ligand loss as a degenerate type 3; plan A8).
+    screen: score only the candidates the charge screen keeps, as the beam search sees them
+    (rank_v2); 'screened_out' marks a gold move that is proposed but removed by the screen."""
+    connected, mechs, mol, allowed = run_next_step(smiles, True, None, screen, True)
     m2i = {a.GetAtomMapNum(): a.GetIdx() for a in mol.GetAtoms() if a.GetAtomMapNum()}
     gold = [gold_map[0]] + [None if x is None else m2i[x] for x in gold_map[1:]]
     equivalent = False
@@ -85,7 +87,8 @@ def process_step(smiles, gold_map, clf, gold_next=None):
         alt = lone_pair_equivalent(gold)
         if alt in mechs:
             gold, equivalent = alt, True
-    scored = [list(m) for m in mechs if m[0] != 11]
+    allowed = set(allowed) if screen else set(range(len(mechs)))
+    scored = [list(m) for i, m in enumerate(mechs) if m[0] != 11 and i in allowed]
     arom = aromatic_flags(mol)
     fps = np.array([make_fingerprint(mol, list(m), arom) for m in scored], dtype=float) if scored else np.zeros((0, 182))
     probs = clf.predict_proba(fps)[:, 1] if len(fps) else np.array([])
@@ -93,7 +96,8 @@ def process_step(smiles, gold_map, clf, gold_next=None):
     rec = {"proposed": gold in mechs, "equivalent": equivalent, "gold_type11": gold[0] == 11,
            "n_candidates": len(scored), "n_kept": int((probs >= 0.5).sum()), "gold_index": gi,
            "p_gold": float(probs[gi]) if gi >= 0 else None,
-           "rank_v121": int((probs > probs[gi]).sum()) + 1 if gi >= 0 else None}
+           "rank_v121": int((probs > probs[gi]).sum()) + 1 if gi >= 0 else None,
+           "screened_out": gold in mechs and gold[0] != 11 and gi < 0}
     if gold_next is not None:
         target = state_norm(gold_next)
         hits = [k for k, m in enumerate(connected) if state_norm(Chem.MolToSmiles(m)) == target]
@@ -111,6 +115,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="max reactions in this chunk (testing)")
     parser.add_argument("--only_class", default=None, help="process only reactions of this class")
     parser.add_argument("--evalfull_fraction", type=float, default=EVALFULL_FRACTION)
+    parser.add_argument("--screen-charges", action="store_true", help="score only screened candidates (rank_v2)")
     args = parser.parse_args()
 
     out = Path(args.out)
@@ -142,7 +147,7 @@ def main() -> None:
                 try:
                     smiles = aim_view_smiles(s.start)
                     rec, fps, probs = process_step(smiles, s.aim_moves[0], clf,
-                                                   s.smiles if len(s.aim_moves) == 1 else None)
+                                                   s.smiles if len(s.aim_moves) == 1 else None, args.screen_charges)
                 except Exception as e:
                     fsteps.write(json.dumps({**base, "error": f"{type(e).__name__}: {e}"}) + "\n")
                     continue
