@@ -57,7 +57,8 @@ def test_labels():
     assert proton_label(15.7 - 19.5) == "meh"     # hydroxide + ketone alpha-H (aldol)
     assert proton_label(-9 - 50) == "bad"         # bromide + alkane C-H
     assert leaving_label(-9) == "good" and leaving_label(4.8) == "good"
-    assert leaving_label(10) == "meh" and leaving_label(15.7) == "bad"
+    assert leaving_label(10) == "meh" and leaving_label(15.7) == "meh" and leaving_label(18) == "meh"
+    assert leaving_label(36) == "bad"                # amide anion R2N-
 
 
 def test_h_written_as_its_own_atom():

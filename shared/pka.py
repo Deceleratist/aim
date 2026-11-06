@@ -129,5 +129,5 @@ def proton_label(dpka: float) -> str:
 
 
 def leaving_label(pkah: float) -> str:
-    """pKaH of the leaving group; scale (b) in pka_table.md (Junrui 5 Nov)."""
-    return "good" if pkah < 5 else "meh" if pkah <= 12 else "bad"
+    """pKaH of the leaving group; scale (b) in pka_table.md (Junrui 5 Nov, cut-off moved to alcohols 6 Nov)."""
+    return "good" if pkah < 5 else "meh" if pkah <= 18 else "bad"   # alcohols (tBuOH 18) are the cut-off
